@@ -4,7 +4,7 @@ const { createHash } = require('node:crypto')
 
 const storage = new Storage();
 const VALIDITY_PERIOD = 10 * 60 * 1000 // 10 minutes
-const bucketName = process.env.BUCKET_NAME;
+const VALIDITY_READ_VIDEO_PERIOD = 10 * 60 * 1000 // 10 minutes
 const domains = process.env.CORS_DOMAINS.split(',');
 const prefix = `images`
 
@@ -32,22 +32,38 @@ functions.http('signUrl', async (req, res) => {
     res.status(204).send('');
     return;
   }
-  console.log('call')
+  const action = req.body.action;
   const fileName = req.body.fileName;
-  const fileId = sha256(fileName);
-  const fileType = req.body.fileType;
-  console.log('Generating a url for file', fileName, ' -> ', fileId, 'and type', fileType)
-    const options = {
+  let filePath;
+  let options;
+  let bucketName;
+  if(action === 'read-video') {
+    bucketName = process.env.VIDEO_BUCKET_NAME;
+    console.log('Generating a read url for file', fileName, ' -> ', fileId, 'and type', fileType)
+    filePath = `videos/${fileName}/${fileName}.webm`
+    options = {
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + VALIDITY_READ_VIDEO_PERIOD
+    };
+  } else {
+    bucketName = process.env.BUCKET_NAME;
+    const fileId = sha256(fileName);
+    const fileType = req.body.fileType;
+    filePath = `${prefix}/${fileId}`
+    console.log('Generating a url for file', fileName, ' -> ', fileId, 'and type', fileType)
+    options = {
         version: 'v4',
         action: 'write',
         expires: Date.now() + VALIDITY_PERIOD,
         contentType: fileType,
     };
+  }
 
     // Get a v4 signed URL for uploading file
         
     storage.bucket(bucketName)
-        .file(`${prefix}/${fileId}`)
+        .file(filePath)
         .getSignedUrl(options)
     .then(urls => {
         console.log('Generated PUT signed URL:');
